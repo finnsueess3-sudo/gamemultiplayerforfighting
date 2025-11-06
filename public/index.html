@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Forest Multiplayer Game</title>
+    <style>body { margin:0; overflow:hidden; }</style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+
+// Spielerobjekte
+let players = {};
+
+// Three.js Setup
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Spielerwürfel für alle Spieler
+const geometry = new THREE.BoxGeometry(1,1,1);
+const material = new THREE.MeshBasicMaterial({color: 0x00ff00});
+let localPlayer = new THREE.Mesh(geometry, material);
+scene.add(localPlayer);
+
+camera.position.z = 5;
+
+// Spielerbewegung
+let moveSpeed = 0.1;
+let keys = {};
+document.addEventListener('keydown', e => keys[e.key] = true);
+document.addEventListener('keyup', e => keys[e.key] = false);
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    // lokale Bewegung
+    if(keys['w']) localPlayer.position.z -= moveSpeed;
+    if(keys['s']) localPlayer.position.z += moveSpeed;
+    if(keys['a']) localPlayer.position.x -= moveSpeed;
+    if(keys['d']) localPlayer.position.x += moveSpeed;
+
+    // Server über Bewegung informieren
+    socket.emit('move', { x: localPlayer.position.x, y: localPlayer.position.y, z: localPlayer.position.z, hp: 100 });
+
+    renderer.render(scene, camera);
+}
+animate();
+
+// Server Events
+socket.on('currentPlayers', data => {
+    for(let id in data){
+        if(id !== socket.id){
+            let p = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({color:0xff0000}));
+            p.position.set(data[id].x, data[id].y, data[id].z);
+            players[id] = p;
+            scene.add(p);
+        }
+    }
+});
+
+socket.on('newPlayer', data => {
+    let p = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({color:0xff0000}));
+    p.position.set(data.x, data.y, data.z);
+    players[data.id] = p;
+    scene.add(p);
+});
+
+socket.on('playerMoved', data => {
+    if(players[data.id]){
+        players[data.id].position.set(data.x, data.y, data.z);
+    }
+});
+
+socket.on('playerDisconnected', id => {
+    if(players[id]){
+        scene.remove(players[id]);
+        delete players[id];
+    }
+});
+</script>
+</body>
+</html>
